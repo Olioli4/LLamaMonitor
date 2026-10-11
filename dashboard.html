@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Universal llama.cpp Monitor · Full Browser</title>
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <!-- Universal llama.cpp Brand Header -->
+  <header>
+    <div class="brand">
+      <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+      </svg>
+      Universal llama.cpp <span>Inference Telemetry</span>
+    </div>
+    <div class="controls">
+      <select id="profile-select" aria-label="Select Server Profile"></select>
+      <button id="btn-profiles-toggle" title="Manage Profiles">⚙️ Profiles</button>
+      <button id="key">API key</button>
+      <button id="theme" aria-label="Switch color theme">Light / dark</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Top Action Bar -->
+    <div class="top">
+      <div>
+        <h1>API Monitor</h1>
+        <p class="sub">Model status, dual-GPU telemetry, and every request, in one place.</p>
+      </div>
+      <div class="controls">
+        <button id="btn-auto-unsloth" class="primary">🔍 Auto-Detect Unsloth</button>
+        <button id="btn-refresh">Refresh</button>
+      </div>
+    </div>
+
+    <div id="notice-error" class="notice" role="status" hidden></div>
+
+    <!-- API Key Connection Panel -->
+    <form id="auth" class="panel" hidden>
+      <label for="api-key">API key / Bearer Token</label>
+      <input id="api-key" type="password" autocomplete="off" placeholder="Only needed if the server has a key">
+      <button class="primary" type="submit">Connect</button>
+    </form>
+
+    <!-- Profile Management Drawer (Expandable) -->
+    <section id="profile-drawer" class="panel" hidden>
+      <div class="panel-bar">
+        <h2>Server Profile Configuration</h2>
+        <div class="controls">
+          <button id="btn-add-profile">+ New Profile</button>
+          <button id="btn-close-drawer">✕ Close</button>
+        </div>
+      </div>
+      <div style="padding: 20px;">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="cfg-name">Profile Name</label>
+            <input type="text" id="cfg-name" placeholder="e.g. Unsloth / llama.cpp">
+          </div>
+          <div class="form-group">
+            <label for="cfg-url">Base Server URL</label>
+            <input type="text" id="cfg-url" placeholder="http://127.0.0.1:8888">
+          </div>
+          <div class="form-group">
+            <label for="cfg-log">Log Folder or File Path (Optional)</label>
+            <input type="text" id="cfg-log" placeholder="e.g. C:\Users\...\logs\llama-server">
+          </div>
+          <div class="form-group">
+            <label for="cfg-key">API Key (Optional)</label>
+            <input type="password" id="cfg-key" placeholder="Bearer auth token">
+          </div>
+        </div>
+        <div class="controls" style="margin-top: 14px;">
+          <button id="btn-save-profile" class="primary">Save Profile</button>
+          <button id="btn-delete-profile" style="color:var(--st-danger); border-color:var(--st-danger);">Delete</button>
+          <span id="cfg-status" class="small" style="margin-left: 10px;"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Top 4 KPI Metric Cards -->
+    <div class="cards">
+      <div class="card">
+        <div class="label">Model & Engine</div>
+        <div id="model-state" class="value"><span class="dot"></span><span id="loaded">Connecting…</span></div>
+        <div id="model" class="model">127.0.0.1:8888</div>
+      </div>
+      <div class="card">
+        <div class="label">Requests Retained</div>
+        <div id="count" class="value">—</div>
+        <div id="active" class="small">Waiting for server</div>
+      </div>
+      <div class="card">
+        <div class="label">Context Fill & VRAM Pool</div>
+        <div id="ctx-fill" class="value">—</div>
+        <div id="vram-summary" class="small">Dual GPU: Detecting...</div>
+      </div>
+      <div class="card">
+        <div class="label">Last Decode Speed</div>
+        <div id="speed" class="value">—</div>
+        <div id="speed-sub" class="small">Tokens / second</div>
+      </div>
+    </div>
+
+    <!-- Dual NVIDIA GPU & Host Hardware Telemetry -->
+    <section class="hw-section">
+      <div class="hw-grid" id="hw-cards-container">
+        <!-- Rendered dynamically by dashboard.js: GPU 0, GPU 1, VRAM Pool, Host CPU/RAM -->
+        <div class="hw-card">
+          <div class="hw-header">
+            <h3>NVIDIA Hardware Telemetry</h3>
+            <span class="tag">Connecting...</span>
+          </div>
+          <div class="empty">Querying Native Bridge...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Workspace Panel (Split List & Detail Inspector) -->
+    <section class="panel">
+      <div class="panel-bar">
+        <h2>Requests & Slots</h2>
+        <div class="filters">
+          <input id="search" aria-label="Filter requests" placeholder="Search ID or endpoint">
+          <select id="filter" aria-label="Request status">
+            <option value="all">All statuses</option>
+            <option value="active">Active / Generating</option>
+            <option value="completed">Completed</option>
+            <option value="error">Errors</option>
+          </select>
+        </div>
+      </div>
+      <div class="workspace">
+        <!-- Left: Interactive Requests List -->
+        <div id="requests" class="requests" aria-label="Request list">
+          <div class="empty">Waiting for inference requests...</div>
+        </div>
+
+        <!-- Right: Inspector Detail Panel -->
+        <div class="detail">
+          <div id="no-selection" class="empty">
+            <strong>Inspect a request</strong>
+            Select a request to see its prompt input, generated output, timings, and token benchmarks.
+          </div>
+          <div id="selection" hidden>
+            <div class="row">
+              <div id="detail-title" class="detail-title"></div>
+              <span id="detail-status" class="tag"></span>
+            </div>
+            <div id="detail-time" class="small" style="margin-top: 4px;"></div>
+
+            <!-- 8 Facts Grid -->
+            <div class="facts">
+              <div class="fact"><span>Wall-clock</span><b id="detail-wall">—</b></div>
+              <div class="fact"><span>Queue / Load</span><b id="detail-queue">—</b></div>
+              <div class="fact"><span>Prefill Latency</span><b id="detail-first">—</b></div>
+              <div class="fact"><span>Prompt Tokens</span><b id="detail-prompt">—</b></div>
+              <div class="fact"><span>Output Tokens</span><b id="detail-tokens">—</b></div>
+              <div class="fact"><span>Decode Speed</span><b id="detail-speed">—</b></div>
+              <div class="fact"><span>Prefill Speed</span><b id="detail-prefill-speed">—</b></div>
+              <div class="fact"><span>Context Fill</span><b id="detail-ctx">—</b></div>
+            </div>
+
+            <div id="detail-error" class="detail-error" hidden></div>
+
+            <div class="tabs" role="tablist" aria-label="Request content">
+              <button role="tab" data-pane="input" aria-selected="true">Prompt / Input</button>
+              <button role="tab" data-pane="output" aria-selected="false">Output</button>
+              <button role="tab" data-pane="reasoning" aria-selected="false">Reasoning</button>
+              <button role="tab" data-pane="response" aria-selected="false">Timings & API Response</button>
+              <button id="copy">Copy</button>
+            </div>
+            <div id="content-note" class="small" style="margin-top:10px"></div>
+            <pre id="content" role="tabpanel" aria-label="Request content"></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <span>Telemetry captured via Native Bridge. Inputs and outputs stay on this machine.</span>
+      <span id="updated">Connecting…</span>
+    </footer>
+  </main>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>

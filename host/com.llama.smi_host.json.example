@@ -1,0 +1,9 @@
+{
+  "name": "com.llama.smi_host",
+  "description": "Universal llama.cpp Monitor SMI Bridge",
+  "path": "C:\\path\\to\\LLamaMonitor\\host\\smi_bridge.exe",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://mogoecckabfchcngfnfgebnhdfmgafpd/"
+  ]
+}

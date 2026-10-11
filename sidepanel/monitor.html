@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Universal llama.cpp Monitor</title>
+  <link rel="stylesheet" href="monitor.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+      </svg>
+      <span>Universal llama.cpp</span>
+    </div>
+    <div class="header-controls">
+      <div class="profile-badge-group">
+        <select id="profile-select" class="st-select" aria-label="Select Server Profile"></select>
+        <button id="btn-settings" class="btn-icon" title="Configure Profiles" aria-label="Settings">⚙️</button>
+        <button id="btn-fullscreen" class="btn-icon" title="Open Full Browser Dashboard" aria-label="Open Full Tab">↗</button>
+      </div>
+      <div id="status-pill" class="pill pill-offline">
+        <span class="dot"></span>
+        <span id="status-text">Connecting...</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="content-body">
+    <!-- Top KPI Metric Cards -->
+    <section class="grid-kpi">
+      <div class="kpi-card">
+        <span class="kpi-label">Decode Speed</span>
+        <div class="kpi-value"><span id="speed-val">—</span> <small>tok/s</small></div>
+        <div class="kpi-sub" id="speed-sub">Prefill: — tok/s</div>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">Context Fill</span>
+        <div class="kpi-value"><span id="ctx-pct">0%</span></div>
+        <div class="kpi-sub" id="ctx-sub">0 / 0 tokens</div>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">VRAM Usage</span>
+        <div class="kpi-value"><span id="vram-val">—</span> <small>GB</small></div>
+        <div class="kpi-sub" id="vram-sub">GPU: —°C</div>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">Active Slots</span>
+        <div class="kpi-value"><span id="slots-val">0</span> <small id="slots-total">/ 0</small></div>
+        <div class="kpi-sub" id="slots-sub">Idle: 0</div>
+      </div>
+    </section>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs" role="tablist">
+      <button class="tab-btn active" data-tab="telemetry" role="tab" aria-selected="true">Hardware</button>
+      <button class="tab-btn" data-tab="slots" role="tab" aria-selected="false">Slots</button>
+      <button class="tab-btn" data-tab="logs" role="tab" aria-selected="false">Log Audit</button>
+      <button class="tab-btn" data-tab="config" role="tab" aria-selected="false">Profiles</button>
+    </nav>
+
+    <!-- Tab 1: Hardware Telemetry -->
+    <section id="tab-telemetry" class="tab-panel active">
+      <!-- Dynamically rendered per GPU (GPU 0, GPU 1, Total Pool) -->
+      <div id="gpu-cards-container" class="gpu-list">
+        <div class="card hardware-card">
+          <div class="card-header">
+            <h3>NVIDIA GPU Telemetry</h3>
+            <span id="gpu-name" class="card-tag">Querying SMI...</span>
+          </div>
+          <div class="meter-group">
+            <div class="empty-state">Detecting GPUs via Native Host...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card hardware-card">
+        <div class="card-header">
+          <h3>Host System</h3>
+          <span id="cpu-name" class="card-tag">chrome.system</span>
+        </div>
+        <div class="meter-group">
+          <div class="meter-row">
+            <div class="meter-info">
+              <span>Host CPU Load</span>
+              <b id="hw-cpu-util">—%</b>
+            </div>
+            <div class="progress-bar info"><div id="bar-cpu" class="progress-fill" style="width:0%"></div></div>
+          </div>
+          <div class="meter-row">
+            <div class="meter-info">
+              <span>System Memory (RAM)</span>
+              <b id="hw-ram-text">— / — GB</b>
+            </div>
+            <div class="progress-bar info"><div id="bar-ram" class="progress-fill" style="width:0%"></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 2: Inference Slots -->
+    <section id="tab-slots" class="tab-panel">
+      <div class="card">
+        <div class="card-header">
+          <h3>Inference Slots</h3>
+          <button id="btn-refresh-slots" class="btn-sm">Refresh</button>
+        </div>
+        <div id="slots-container" class="slots-list">
+          <div class="empty-state">No active slots reported by server.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 3: Request Log Audit -->
+    <section id="tab-logs" class="tab-panel">
+      <div class="card">
+        <div class="card-header">
+          <h3>Recent Request Audit</h3>
+          <span class="card-tag" id="log-status">Checking log...</span>
+        </div>
+        <p class="section-desc">Live inference timings & benchmarks parsed from latest log file via Native Bridge.</p>
+        <div id="logs-container" class="logs-table-wrap">
+          <table class="st-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Task / Slot</th>
+                <th>Prefill</th>
+                <th>Generation</th>
+                <th>Tokens</th>
+                <th>Duration</th>
+              </tr>
+            </thead>
+            <tbody id="logs-body">
+              <tr><td colspan="6" class="empty-cell">Waiting for log records...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 4: Configuration & Profiles -->
+    <section id="tab-config" class="tab-panel">
+      <div class="card">
+        <div class="card-header">
+          <h3>Server Profiles</h3>
+          <button id="btn-add-profile" class="btn-sm primary">+ New Profile</button>
+        </div>
+        <div class="profile-editor">
+          <div class="form-group">
+            <label for="cfg-name">Profile Name</label>
+            <input type="text" id="cfg-name" class="st-input" placeholder="e.g. Unsloth / llama.cpp">
+          </div>
+          <div class="form-group">
+            <label for="cfg-url">Base Server URL</label>
+            <input type="text" id="cfg-url" class="st-input" placeholder="http://127.0.0.1:8888">
+          </div>
+          <div class="form-group">
+            <label for="cfg-log">Log File or Folder Path (Optional)</label>
+            <input type="text" id="cfg-log" class="st-input" placeholder="e.g. C:\Users\...\logs\llama-server">
+            <small class="muted">Supports directory paths or file paths. If a folder is specified (or left blank for Unsloth), the newest log file is automatically resolved on each model run.</small>
+          </div>
+          <div class="form-group">
+            <label for="cfg-key">API Key / Bearer Token (Optional)</label>
+            <input type="password" id="cfg-key" class="st-input" placeholder="Bearer key if server requires auth">
+          </div>
+          <div class="form-group" style="margin-top:4px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <button type="button" id="btn-detect-unsloth" class="btn-sm">🔍 Auto-Detect Unsloth Port & Key</button>
+              <span id="detect-unsloth-status" class="muted"></span>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button id="btn-save-profile" class="btn-sm primary">Save Profile</button>
+            <button id="btn-delete-profile" class="btn-sm danger">Delete</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <span id="footer-status">Native Host: Standby</span>
+    <span id="footer-version">v1.0.0</span>
+  </footer>
+
+  <script src="monitor.js"></script>
+</body>
+</html>
