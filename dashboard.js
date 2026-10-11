@@ -15,6 +15,22 @@ let nativePort = null;
 let detectedUnsloth = null;
 let lastGpusData = [];
 let prevCpuTimes = null;
+let lastHostCpuText = "—%";
+let lastHostCpuPct = 0;
+let lastHostRamText = "— / — GB";
+let lastHostRamPct = 0;
+
+function formatDuration(ms) {
+  if (ms === null || ms === undefined || isNaN(ms)) return "—";
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${(ms / 1000).toFixed(2)} s`;
+}
+
+function formatDurationShort(ms) {
+  if (ms === null || ms === undefined || isNaN(ms)) return "—";
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${(ms / 1000).toFixed(1)} s`;
+}
 
 const DEFAULT_PROFILES = {
   activeProfileId: "unsloth",
@@ -273,16 +289,16 @@ function renderAllGpus(gpus) {
       <div class="meter-row">
         <div class="meter-info">
           <span>Host CPU Load</span>
-          <b id="hw-cpu-val">—%</b>
+          <b id="hw-cpu-val">${lastHostCpuText}</b>
         </div>
-        <div class="progress-bar info"><div id="bar-cpu" class="progress-fill" style="width:0%"></div></div>
+        <div class="progress-bar info"><div id="bar-cpu" class="progress-fill" style="width:${lastHostCpuPct}%"></div></div>
       </div>
       <div class="meter-row">
         <div class="meter-info">
           <span>Host Memory (RAM)</span>
-          <b id="hw-ram-val">— / — GB</b>
+          <b id="hw-ram-val">${lastHostRamText}</b>
         </div>
-        <div class="progress-bar info"><div id="bar-ram" class="progress-fill" style="width:0%"></div></div>
+        <div class="progress-bar info"><div id="bar-ram" class="progress-fill" style="width:${lastHostRamPct}%"></div></div>
       </div>
     </div>
   `;
@@ -308,9 +324,11 @@ function pollHostMetrics() {
           if (totalDiff > 0) sumPct += ((userDiff + kernelDiff) / totalDiff) * 100;
         }
         totalUsage = sumPct / processors.length;
-        setText("hw-cpu-val", `${totalUsage.toFixed(0)}%`);
+        lastHostCpuText = `${totalUsage.toFixed(0)}%`;
+        lastHostCpuPct = Math.min(100, totalUsage);
+        setText("hw-cpu-val", lastHostCpuText);
         const bar = $("bar-cpu");
-        if (bar) bar.style.width = `${Math.min(100, totalUsage)}%`;
+        if (bar) bar.style.width = `${lastHostCpuPct}%`;
       }
       prevCpuTimes = processors.map((p) => ({ ...p.usage }));
     });
@@ -322,9 +340,11 @@ function pollHostMetrics() {
       const totalGb = mem.capacity / 1073741824;
       const usedGb = (mem.capacity - mem.availableCapacity) / 1073741824;
       const pct = (usedGb / totalGb) * 100;
-      setText("hw-ram-val", `${usedGb.toFixed(1)} / ${totalGb.toFixed(1)} GB`);
+      lastHostRamText = `${usedGb.toFixed(1)} / ${totalGb.toFixed(1)} GB`;
+      lastHostRamPct = Math.min(100, pct);
+      setText("hw-ram-val", lastHostRamText);
       const bar = $("bar-ram");
-      if (bar) bar.style.width = `${Math.min(100, pct)}%`;
+      if (bar) bar.style.width = `${lastHostRamPct}%`;
     });
   }
 }
@@ -387,11 +407,12 @@ async function pollServer() {
       totalCtx += nCtx;
       usedCtx += tokensUsed;
 
-      // Inject active slot prompt into task record if active
+      // Inject active slot prompt and context size into task record if active
       if (s.id_task) {
         const t = auditTasksMap.get(String(s.id_task));
-        if (t && s.prompt && !t.prompt) {
-          t.prompt = s.prompt;
+        if (t) {
+          if (s.prompt && !t.prompt) t.prompt = s.prompt;
+          if (s.n_ctx) t.slotCtx = s.n_ctx;
         }
       }
     }
@@ -492,7 +513,7 @@ function parseMultiFormatLogs(rawLines, fileName) {
       if (pm) {
         t.prefill = { ms: parseFloat(pm[1]), tokens: parseInt(pm[2], 10), speed: parseFloat(pm[3]) };
         t.prefillProg = null;
-        if (t.prefill.speed > 0) setText("speed-sub", `Prefill: ${t.prefill.speed.toFixed(1)} tok/s · ${t.prefill.ms.toFixed(0)} ms`);
+        if (t.prefill.speed > 0) setText("speed-sub", `Prefill: ${t.prefill.speed.toFixed(1)} tok/s · ${formatDurationShort(t.prefill.ms)}`);
       }
 
       // Generation timing
@@ -629,14 +650,32 @@ function showDetail(id) {
   setText("detail-time", `Recorded at ${r.time}`);
 
   // Facts Grid (8 Facts)
-  setText("detail-wall", r.total?.ms ? `${(r.total.ms / 1000).toFixed(2)} s` : r.gen?.ms ? `${(r.gen.ms / 1000).toFixed(2)} s` : "In progress");
-  setText("detail-queue", "0.01 s");
-  setText("detail-first", r.prefill?.ms ? `${r.prefill.ms.toFixed(0)} ms` : "—");
-  setText("detail-prompt", r.prefill ? `${r.prefill.tokens} tok` : "Cached");
-  setText("detail-tokens", r.gen ? `${r.gen.tokens} tok` : r.liveGen ? `${r.liveGen.tokens} tok (live)` : "—");
+  const wallStr = r.total?.ms ? formatDuration(r.total.ms) : r.gen?.ms ? formatDuration(r.gen.ms) : "In progress";
+  setText("detail-wall", wallStr);
+
+  let queueMs = 0;
+  if (r.total?.ms && (r.prefill?.ms || r.gen?.ms)) {
+    const execMs = (r.prefill?.ms || 0) + (r.gen?.ms || 0);
+    queueMs = Math.max(0, r.total.ms - execMs);
+  }
+  setText("detail-queue", queueMs > 15 ? formatDuration(queueMs) : "< 10 ms");
+
+  setText("detail-first", r.prefill?.ms ? formatDuration(r.prefill.ms) : (r.prefillProg ? "Processing..." : "Cached / —"));
+  setText("detail-prompt", r.prefill ? `${r.prefill.tokens.toLocaleString()} tok` : "Cached");
+  setText("detail-tokens", r.gen ? `${r.gen.tokens.toLocaleString()} tok` : r.liveGen ? `${r.liveGen.tokens.toLocaleString()} tok (live)` : "—");
   setText("detail-speed", r.gen ? `${r.gen.speed.toFixed(1)} tok/s` : r.liveGen ? `${r.liveGen.speed.toFixed(1)} tok/s` : "—");
   setText("detail-prefill-speed", r.prefill ? `${r.prefill.speed.toFixed(1)} tok/s` : "—");
-  setText("detail-ctx", `Slot #${r.slot}`);
+
+  const promptToks = r.prefill?.tokens || 0;
+  const genToks = r.gen?.tokens || r.liveGen?.tokens || 0;
+  const totalReqToks = promptToks + genToks;
+  if (totalReqToks > 0) {
+    const ctxLimit = r.slotCtx || 6672;
+    const pct = Math.min(100, (totalReqToks / ctxLimit) * 100).toFixed(1);
+    setText("detail-ctx", `${totalReqToks.toLocaleString()} tok (${pct}%)`);
+  } else {
+    setText("detail-ctx", `Slot #${r.slot}`);
+  }
 
   updateTabContent();
 }
