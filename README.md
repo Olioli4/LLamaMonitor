@@ -113,7 +113,7 @@ Runs directly inside Google Chrome with two complementary views:
 
 ### Step 1: Clone Repository
 ```bash
-git clone https://github.com/your-username/LLamaMonitor.git
+git clone https://github.com/Olioli4/LLamaMonitor.git
 cd LLamaMonitor
 ```
 
